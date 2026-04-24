@@ -129,7 +129,6 @@ export type Options<T> = {
 	bufferRows: number,
 	maxPoolSize: number,
 
-	scrollIdleDelay: number,
 	scrollAnimationDuration: number,
 	scrollAnimator: ScrollAnimator<T>,
 
@@ -163,7 +162,6 @@ type State<T> = {
 	onItemHidden: onItemHiddenFn?,
 	onScrolled: onScrolledFn?,
 
-	scrollIdleDelay: number,
 	scrollAnimationDuration: number,
 	scrollAnimator: ScrollAnimator<T>,
 	activeScrollCancel: (() -> ())?,
@@ -173,11 +171,11 @@ type State<T> = {
 	totalFrames: number,
 
 	isUpdating: boolean,
-	isScrolling: boolean,
 	layoutDirty: boolean,
 	metrics: Metrics?,
+	visibleStartIndex: number?,
+	visibleEndIndex: number?,
 
-	scrollToken: number,
 	scrollConnection: RBXScriptConnection?,
 	resizeConnection: RBXScriptConnection?,
 }
@@ -456,23 +454,15 @@ function VirtualizedUI.new<T>(options: Options<T>): VirtualizedUI<T>
 	self.onItemHidden = options.onItemHidden
 	self.onScrolled = options.onScrolled
 
-	self.scrollIdleDelay = options.scrollIdleDelay
 	self.scrollAnimationDuration = options.scrollAnimationDuration
 	self.scrollAnimator = options.scrollAnimator
-	self.activeScrollCancel = nil
 
 	self.framePool = {}
 	self.activeFrames = {}
 	self.totalFrames = 0
 
 	self.isUpdating = false
-	self.isScrolling = false
 	self.layoutDirty = true
-	self.metrics = nil
-
-	self.scrollToken = 0
-	self.scrollConnection = nil
-	self.resizeConnection = nil
 
 	self.scrollingFrame.AutomaticCanvasSize = Enum.AutomaticSize.None
 	self.scrollingFrame.ElasticBehavior = Enum.ElasticBehavior.WhenScrollable
@@ -486,9 +476,6 @@ function VirtualizedUI.new<T>(options: Options<T>): VirtualizedUI<T>
 	self.itemTemplate.Visible = false
 
 	self.scrollConnection = self.scrollingFrame:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
-		self.isScrolling = true
-		self.scrollToken += 1
-
 		if not self.isUpdating then
 			VirtualizedUI.UpdateVisibleItems(self)
 		end
@@ -497,13 +484,6 @@ function VirtualizedUI.new<T>(options: Options<T>): VirtualizedUI<T>
 		if onScrolled then
 			onScrolled(self.scrollingFrame.CanvasPosition.Y)
 		end
-
-		local currentToken = self.scrollToken
-		task.delay(self.scrollIdleDelay, function()
-			if self.scrollToken == currentToken then
-				self.isScrolling = false
-			end
-		end)
 	end)
 
 	self.resizeConnection = self.scrollingFrame:GetPropertyChangedSignal("AbsoluteSize"):Connect(function()
@@ -528,10 +508,14 @@ function VirtualizedUI.UpdateVisibleItems<T>(self: State<T>)
 
 	self.isUpdating = true
 
+	local forceRefresh = self.layoutDirty or self.metrics == nil
 	local metrics = resolveMetrics(self)
 	applyCanvasSizeFromMetrics(self, metrics)
 
 	if metrics.itemCount == 0 or metrics.itemsPerRow <= 0 or metrics.rowCount <= 0 or metrics.rowSpan <= 0 then
+		self.visibleStartIndex = nil
+		self.visibleEndIndex = nil
+
 		local recycleList: { [number]: GuiObject } = {}
 		for index, frame in self.activeFrames do
 			recycleList[index] = frame
@@ -557,6 +541,9 @@ function VirtualizedUI.UpdateVisibleItems<T>(self: State<T>)
 	)
 
 	if endRow < startRow then
+		self.visibleStartIndex = nil
+		self.visibleEndIndex = nil
+
 		local recycleList: { [number]: GuiObject } = {}
 		for index, frame in self.activeFrames do
 			recycleList[index] = frame
@@ -572,6 +559,14 @@ function VirtualizedUI.UpdateVisibleItems<T>(self: State<T>)
 
 	local startIndex = startRow * metrics.itemsPerRow + 1
 	local endIndex = math.min(metrics.itemCount, (endRow + 1) * metrics.itemsPerRow)
+
+	if not forceRefresh and self.visibleStartIndex == startIndex and self.visibleEndIndex == endIndex then
+		self.isUpdating = false
+		return
+	end
+
+	self.visibleStartIndex = startIndex
+	self.visibleEndIndex = endIndex
 
 	local recycleList: { [number]: GuiObject } = {}
 	for index, frame in self.activeFrames do
