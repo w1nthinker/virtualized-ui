@@ -134,7 +134,7 @@ export type Options<T> = {
 
 	data: { T }?,
 	getItemCount: (() -> number)?,
-	getItem: ((number) -> T?)?,
+	getItem: ((number) -> T)?,
 
 	onApplyData: onApplyDataFn<T>,
 	onItemSetup: onItemSetupFn<T>?,
@@ -150,7 +150,7 @@ type State<T> = {
 
 	data: { T },
 	getItemCount: (() -> number)?,
-	getItem: ((number) -> T?)?,
+	getItem: ((number) -> T)?,
 
 	layout: LayoutConfig,
 	bufferRows: number,
