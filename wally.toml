@@ -1,0 +1,18 @@
+[package]
+name = "w1nthinker/virtualized-ui"
+description = "virtualized UIGrid- and UIListLayout"
+version = "0.1.2"
+license = "MIT"
+authors = ["w1nthinker"]
+realm = "shared"
+registry = "https://github.com/UpliftGames/wally-index"
+repository = "https://github.com/w1nthinker/virtualized-ui"
+include = [
+    "src",
+    "README.md",
+    "LICENSE",
+]
+exclude = [
+    "example",
+    "rokit.toml",
+]
